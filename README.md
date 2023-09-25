@@ -1,1 +1,1 @@
-# MU-MNC002A-labs-payment
+# MU-MNC002A-labs-machine
