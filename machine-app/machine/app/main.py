@@ -1,7 +1,11 @@
+import asyncio
 import logging
 import os
+
 from fastapi import FastAPI
+
 from app.routers import main_router
+from app.routers.machine_suscriber import AsyncConsumer
 from app.sql import models, database
 
 # Configure logging ################################################################################
@@ -11,14 +15,14 @@ logger = logging.getLogger(__name__)
 APP_VERSION = os.getenv("APP_VERSION", "2.0.0")
 logger.info("Running app version %s", APP_VERSION)
 DESCRIPTION = """
-Monolithic manufacturing order application - Payments Microservice.
+Monolithic manufacturing order application - MAchine Microservice.
 """
 
 tag_metadata = [
 
     {
         "name": "Machine",
-        "description": "Endpoints related to machines",
+        "description": "Endpoints related to machine",
     },
 
 ]
@@ -41,6 +45,9 @@ app = FastAPI(
 
 app.include_router(main_router.router)
 
+rabbitmq_consumer = AsyncConsumer('event_exchange', 'machine.request', AsyncConsumer.consume_order_paid)
+rabbitmq_consumer2 = AsyncConsumer('event_exchange', 'auth.publickey', AsyncConsumer.ask_public_key)
+
 
 @app.on_event("startup")
 async def startup_event():
@@ -48,6 +55,15 @@ async def startup_event():
     logger.info("Creating database tables")
     async with database.engine.begin() as conn:
         await conn.run_sync(models.Base.metadata.create_all)
+
+    main_router.get_public_key()
+
+    logger.debug("WAITING FOR RABBITMQ")
+    consumer_tasks = [
+        asyncio.create_task(rabbitmq_consumer.start_consuming()),
+        asyncio.create_task(rabbitmq_consumer2.start_consuming())
+    ]
+    asyncio.gather(*consumer_tasks)
 
 
 # Main #############################################################################################
@@ -62,4 +78,5 @@ if __name__ == "__main__":
         port=8000,
         log_config='logging.yml'
     )
+
     logger.debug("App finished as script")

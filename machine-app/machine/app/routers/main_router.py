@@ -1,48 +1,69 @@
-from flask import request, jsonify, abort
-from flask import current_app as app
-from .models import Piece
-from werkzeug.exceptions import NotFound, InternalServerError, BadRequest, UnsupportedMediaType
-import traceback
-from .machine import Machine
-from .. import Session
+import logging
+from typing import List
+from fastapi import APIRouter, Depends, status, Request, Path
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.dependencies import get_db
+from app.sql import crud, schemas
+from .router_utils import raise_and_log_error
+import requests
+from app.keys import RsaKeys
 
-my_machine = Machine()
-
-
-# Piece Routes #########################################################################################################
-@app.route('/piece', methods=['GET'])
-@app.route('/pieces', methods=['GET'])
-def view_pieces():
-    session = Session()
-    order_id = request.args.get('order_id')
-    if order_id:
-        pieces = session.query(Piece).filter_by(order_id=order_id).all()
-    else:
-        pieces = session.query(Piece).all()
-    response = jsonify(Piece.list_as_dict(pieces))
-    session.close()
-    return response
+logger = logging.getLogger(__name__)
+router = APIRouter()
 
 
-@app.route('/piece/<int:piece_ref>', methods=['GET'])
-def view_piece(piece_ref):
-    session = Session()
-    piece = session.query(Piece).get(piece_ref)
-    if not piece:
-        session.close()
-        abort(NotFound.code)
-    print(piece)
-    response = jsonify(piece.as_dict())
-    session.close()
-    return response
+@router.get(
+    "/pieces",
+    summary="Get a list of pieces",
+    response_model=List[schemas.Piece],
+    tags=["Pieces"]
+)
+async def get_pieces(
+        db: AsyncSession = Depends(get_db),
+):
+    """Endpoint to retrieve a list of pieces."""
+    logger.debug("GET '/pieces' endpoint called.")
+    pieces = await crud.get_pieces(db)
+    return pieces
 
 
-# Machine Routes #######################################################################################################
-@app.route('/machine/status', methods=['GET'])
-def view_machine_status():
-    working_piece = my_machine.working_piece
-    queue = my_machine.queue
-    if working_piece:
-        working_piece = working_piece.as_dict()
-    response = {"status": my_machine.status, "working_piece": working_piece, "queue": list(queue)}
-    return jsonify(response)
+@router.get(
+    "/piece/{piece_ref}",
+    summary="Get a single piece by ID",
+    response_model=schemas.Piece,
+    tags=["Pieces"]
+)
+async def get_piece(
+        piece_ref: int = Path(..., description="The ID of the piece to retrieve"),
+        db: AsyncSession = Depends(get_db),
+):
+    """Endpoint to retrieve a single piece by ID."""
+    logger.debug(f"GET '/piece/{piece_ref}' endpoint called.")
+    piece = await crud.get_piece_by_id(db, piece_ref)
+    if piece is None:
+        raise_and_log_error(logger, status.HTTP_404_NOT_FOUND, "Piece not found")
+    return piece
+
+
+def get_public_key():
+    logger.debug("GETTING PUBLIC KEY")
+    endpoint = "http://192.168.17.11/auth/public-key"
+
+    try:
+        response = requests.get(endpoint)
+
+        if response.status_code == 200:
+            x = response.json()["public_key"]
+            RsaKeys.set_public_key(x)
+        else:
+            print(f"Error al obtener la clave pública. Código de respuesta: {response.status_code}")
+    except requests.exceptions.RequestException as e:
+        print(f"Error de solicitud: {e}")
+
+
+def get_jwt_from_request(request):
+    auth = request.headers.get('Authorization')
+    if auth is None:
+        raise_and_log_error(logger, status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "NO JWT PROVIDED")
+    jwt_token = auth.split(" ")[1]
+    return jwt_token

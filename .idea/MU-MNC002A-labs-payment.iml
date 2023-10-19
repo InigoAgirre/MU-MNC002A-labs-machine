@@ -5,7 +5,14 @@
       <sourceFolder url="file://$MODULE_DIR$/machine-app/machine" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/env" />
     </content>
-    <orderEntry type="jdk" jdkName="Python 3.9 (MU-MNC002A-labs-payment)" jdkType="Python SDK" />
+    <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
+  </component>
+  <component name="PyNamespacePackagesService">
+    <option name="namespacePackageFolders">
+      <list>
+        <option value="$MODULE_DIR$/machine-app/machine/app" />
+      </list>
+    </option>
   </component>
 </module>

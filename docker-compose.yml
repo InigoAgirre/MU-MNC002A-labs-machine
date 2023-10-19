@@ -9,7 +9,39 @@ services:
       - './db_volume:/volume'
     environment:
       PYTHONUNBUFFERED: 1
-      SQLALCHEMY_DATABASE_URL: ${SQLALCHEMY_SQLITE_DATABASE_URI}
+      SQLALCHEMY_DATABASE_URL: ${PAYMENT_SQLALCHEMY_SQLITE_DATABASE_URI}
       LOG_CONFIG_FILENAME: ${LOG_CONFIG_FILENAME}
+    networks:
+      lb7_network:
+        ipv4_address: '${PAYMENT_REPLICA1_IP}'
     restart: on-failure
 
+  rabbitmq:
+    image: rabbitmq:3.8-management-alpine
+    ports:
+      - "15671:15671"
+      - "5671:5671"
+    environment:
+      RABBITMQ_DEFAULT_USER: "${RABBITMQ_DEFAULT_USER}"
+      RABBITMQ_DEFAULT_PASS: "${RABBITMQ_DEFAULT_PASS}"
+      RABBITMQ_DEFAULT_VHOST: "/"
+      RABBITMQ_SSL_VERIFY: verify_none
+      RABBITMQ_SSL_CACERTFILE: /etc/ssl/certs/cert.pem
+      RABBITMQ_SSL_CERTFILE: /etc/ssl/certs/rabbitmq_cert.pem
+      RABBITMQ_SSL_KEYFILE: /etc/ssl/certs/rabbitmq_key.pem
+      RABBITMQ_SSL_FAIL_IF_NO_PEER_CERT: false
+    networks:
+      lb7_network:
+        ipv4_address: '${RABBITMQ_IP}'
+    volumes:
+      - './certs/rabbitmq/rabbitmq_cert.pem:/etc/ssl/certs/rabbitmq_cert.pem'
+      - './certs/rabbitmq/rabbitmq_key.pem:/etc/ssl/certs/rabbitmq_key.pem'
+      - './certs/rabbitmq/cert.pem:/etc/ssl/certs/cert.pem'
+
+networks:
+  lb7_network:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: '${NETWORK_SUBNET}'

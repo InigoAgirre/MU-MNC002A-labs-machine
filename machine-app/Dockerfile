@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.10-slim
 # This is where we'll put the requirements.txt file and the app directory.
 WORKDIR /code
 
