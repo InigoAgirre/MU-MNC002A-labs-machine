@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 APP_VERSION = os.getenv("APP_VERSION", "2.0.0")
 logger.info("Running app version %s", APP_VERSION)
 DESCRIPTION = """
-Monolithic manufacturing order application - MAchine Microservice.
+Monolithic manufacturing order application - Machine Microservice.
 """
 
 tag_metadata = [
