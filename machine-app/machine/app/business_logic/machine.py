@@ -3,9 +3,11 @@ from random import randint
 from time import sleep
 from collections import deque
 from threading import Thread, Lock, Event
+from sqlalchemy.sql import select
 from app.sql.models import Piece
 from ..routers.machine_publisher import publish_msg
-from app.sql.database import SessionLocal  # Import SessionLocal
+from app.sql.database import SessionLocal
+
 
 class Machine(Thread):
     STATUS_WAITING = "Waiting"
@@ -19,22 +21,26 @@ class Machine(Thread):
         self.queue = deque([])
         self.working_piece = None
         self.status = Machine.STATUS_WAITING
+        self.current_exchange = None  # no se si funciona
         self.instance = self
         self.queue_not_empty_event = Event()
         self.reload_pieces_at_startup()
         self.order_finished = 0
         self.start()
 
-    def reload_pieces_at_startup(self):
-        self.thread_session = SessionLocal()  # Use SessionLocal
-        manufacturing_piece = self.thread_session.query(Piece).filter_by(status=Piece.STATUS_MANUFACTURING).first()
+    async def reload_pieces_at_startup(self):
+        self.thread_session = SessionLocal()
+        manufacturing_piece = await self.thread_session.execute(
+            select(Piece).filter(Piece.c.status == Piece.STATUS_MANUFACTURING))
+        manufacturing_piece = manufacturing_piece.scalar()  # Use scalar to get the result
         if manufacturing_piece:
             self.add_piece_to_queue(manufacturing_piece)
 
-        queued_pieces = self.thread_session.query(Piece).filter_by(status=Piece.STATUS_QUEUED).all()
+        queued_pieces = await self.thread_session.execute(select(Piece).filter(Piece.c.status == Piece.STATUS_QUEUED))
+        queued_pieces = queued_pieces.scalars().all()
         if queued_pieces:
             self.add_pieces_to_queue(queued_pieces)
-        self.thread_session.close()
+        await self.thread_session.close()
 
     def run(self):
         while True:
@@ -76,14 +82,14 @@ class Machine(Thread):
         }
         await publish_msg(exchange, 'machine.piece_from_order_created', json.dumps(message_body))
 
-    def working_piece_to_finished(self):
+    async def working_piece_to_finished(self):
         self.instance.status = Machine.STATUS_CHANGING_PIECE
         self.working_piece.status = Piece.STATUS_MANUFACTURED
         self.thread_session.commit()
         self.thread_session.flush()
 
         order_id = self.working_piece.order_id
-
+        await self.publish_piece_finished(self.current_exchange, order_id)
 
     def add_pieces_to_queue(self, pieces):
         for piece in pieces:

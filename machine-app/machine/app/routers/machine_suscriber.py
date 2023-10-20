@@ -8,16 +8,14 @@ from app.keys import RsaKeys
 from app.sql import schemas
 from ..business_logic.machine import Machine
 
-my_machine = Machine()
 logger = logging.getLogger(__name__)
 
 
 class AsyncConsumer:
-
-    def __init__(self, exchange_name, routing_key, callback_func):
+    def __init__(self, exchange_name, routing_key):
         self.exchange_name = exchange_name
         self.routing_key = routing_key
-        self.callback_func = callback_func
+        self.my_machine = Machine()
 
     async def start_consuming(self):
         logger.info("Waiting for RabbitMQ")
@@ -30,7 +28,7 @@ class AsyncConsumer:
 
         async with connection:
             channel = await connection.channel()
-            await channel.set_qos(prefetch_count=1)  # Recibir un mensaje a la vez
+            await channel.set_qos(prefetch_count=1)
             exchange = await channel.declare_exchange(self.exchange_name, type=aio_pika.ExchangeType.TOPIC)
             queue = await channel.declare_queue("", exclusive=True)
             await queue.bind(exchange, routing_key=self.routing_key)
@@ -38,10 +36,9 @@ class AsyncConsumer:
             async with queue.iterator() as queue_iterator:
                 async for message in queue_iterator:
                     async with message.process():
-                        await self.callback_func(message.body, exchange)
+                        await self.consume_order_paid(message.body, exchange)
 
-    @staticmethod
-    async def consume_order_paid(body, exchange):
+    async def consume_order_paid(self, body, exchange):
         logger.debug("Consume order paid has been called")
         content = json.loads(body)
         order_id = content['order_id']
@@ -52,14 +49,12 @@ class AsyncConsumer:
         for _ in range(num_pieces_ordered):
             # Create and add pieces to the machine queue
             piece = schemas.Piece(order_id=order_id)
-            my_machine.add_piece_to_queue(piece)
-
-        my_machine.publish_piece_finished(exchange, order_id)
+            self.my_machine.add_piece_to_queue(piece)
 
         logger.info(f"Processed order paid for Order ID: {order_id}")
-        # await publish_msg(exchange, "machine.algo", json.dumps(content))
+        # await publish_msg(exchange, "machine.algo", json.dumps(content)
 
-    async def ask_public_key(body, exchange):
+    async def ask_public_key(self, body, exchange):
         logger.debug("GETTING PUBLIC KEY")
         endpoint = "http://192.168.17.11/auth/public-key"
 

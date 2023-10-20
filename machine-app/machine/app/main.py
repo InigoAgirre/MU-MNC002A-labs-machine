@@ -45,9 +45,8 @@ app = FastAPI(
 
 app.include_router(main_router.router)
 
-rabbitmq_consumer = AsyncConsumer('event_exchange', 'machine.request', AsyncConsumer.consume_order_paid)
-rabbitmq_consumer2 = AsyncConsumer('event_exchange', 'auth.publickey', AsyncConsumer.ask_public_key)
-
+rabbitmq_consumer = AsyncConsumer('event_exchange', 'machine.request')
+rabbitmq_consumer2 = AsyncConsumer('event_exchange', 'auth.publickey')
 
 @app.on_event("startup")
 async def startup_event():
