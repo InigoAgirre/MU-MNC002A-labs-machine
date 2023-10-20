@@ -21,7 +21,6 @@ class Machine(Thread):
         self.queue = deque([])
         self.working_piece = None
         self.status = Machine.STATUS_WAITING
-        self.current_exchange = None  # no se si funciona
         self.instance = self
         self.queue_not_empty_event = Event()
         self.reload_pieces_at_startup()
@@ -76,12 +75,6 @@ class Machine(Thread):
         self.thread_session.commit()
         self.thread_session.flush()
 
-    async def publish_piece_finished(self, exchange, order_id):
-        message_body = {
-            'order_id': order_id
-        }
-        await publish_msg(exchange, 'machine.piece_from_order_created', json.dumps(message_body))
-
     async def working_piece_to_finished(self):
         self.instance.status = Machine.STATUS_CHANGING_PIECE
         self.working_piece.status = Piece.STATUS_MANUFACTURED
@@ -89,7 +82,11 @@ class Machine(Thread):
         self.thread_session.flush()
 
         order_id = self.working_piece.order_id
-        await self.publish_piece_finished(self.current_exchange, order_id)
+
+        message_body = {
+            'order_id': order_id
+        }
+        await publish_msg(json.dumps(message_body))
 
     def add_pieces_to_queue(self, pieces):
         for piece in pieces:

@@ -1,12 +1,10 @@
-import asyncio
 import logging
 import os
-
-from fastapi import FastAPI
-
+import asyncio
+from fastapi import FastAPI, BackgroundTasks
 from app.routers import main_router
-from app.routers.machine_suscriber import AsyncConsumer
 from app.sql import models, database
+from app.routers.machine_suscriber import AsyncConsumer
 
 # Configure logging ################################################################################
 logger = logging.getLogger(__name__)
@@ -45,8 +43,9 @@ app = FastAPI(
 
 app.include_router(main_router.router)
 
-rabbitmq_consumer = AsyncConsumer('event_exchange', 'machine.request')
-rabbitmq_consumer2 = AsyncConsumer('event_exchange', 'auth.publickey')
+rabbitmq_consumer = AsyncConsumer('event_exchange', 'payment.request', AsyncConsumer.consume_order)
+rabbitmq_consumer2 = AsyncConsumer('event_exchange', 'auth.publickey', AsyncConsumer.ask_public_key)
+
 
 @app.on_event("startup")
 async def startup_event():

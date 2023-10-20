@@ -28,7 +28,7 @@ async def get_pieces(
 
 
 @router.get(
-    "/piece/{piece_ref}",
+    "/pieces/{piece_ref}",
     summary="Get a single piece by ID",
     response_model=schemas.Piece,
     tags=["Pieces"]
