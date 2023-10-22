@@ -1,48 +1,71 @@
 import logging
 from typing import List
-from fastapi import APIRouter, Depends, status, Request, Path
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.dependencies import get_db
 from app.sql import crud, schemas
 from .router_utils import raise_and_log_error
 import requests
 from app.keys import RsaKeys
+from ..business_logic.machine import Machine
+from app.dependencies import get_db, get_machine
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+# Pieces ###########################################################################################
 @router.get(
-    "/pieces",
-    summary="Get a list of pieces",
+    "/piece",
     response_model=List[schemas.Piece],
-    tags=["Pieces"]
+    summary="retrieve piece list",
+    tags=["Piece", "List"]
 )
-async def get_pieces(
-        db: AsyncSession = Depends(get_db),
+async def get_piece_list(
+        db: AsyncSession = Depends(get_db)
 ):
-    """Endpoint to retrieve a list of pieces."""
-    logger.debug("GET '/pieces' endpoint called.")
-    pieces = await crud.get_pieces(db)
-    return pieces
+    """Retrieve the list of pieces."""
+    logger.debug("GET '/piece' endpoint called.")
+    return await crud.get_piece_list(db)
 
 
 @router.get(
-    "/pieces/{piece_ref}",
-    summary="Get a single piece by ID",
+    "/piece/{piece_id}",
+    summary="Retrieve single piece by id",
     response_model=schemas.Piece,
-    tags=["Pieces"]
+    tags=['Piece']
 )
-async def get_piece(
-        piece_ref: int = Path(..., description="The ID of the piece to retrieve"),
-        db: AsyncSession = Depends(get_db),
+async def get_single_piece(
+        piece_id: int,
+        db: AsyncSession = Depends(get_db)
 ):
-    """Endpoint to retrieve a single piece by ID."""
-    logger.debug(f"GET '/piece/{piece_ref}' endpoint called.")
-    piece = await crud.get_piece_by_id(db, piece_ref)
-    if piece is None:
-        raise_and_log_error(logger, status.HTTP_404_NOT_FOUND, "Piece not found")
-    return piece
+    """Retrieve single piece by id"""
+    logger.debug("GET '/piece/%i' endpoint called.", piece_id)
+    return await crud.get_piece(db, piece_id)
+
+
+# Machine ##########################################################################################
+@router.get(
+    "/machine/status",
+    summary="Retrieve machine status",
+    response_model=schemas.MachineStatusResponse,
+    tags=['Machine']
+)
+async def machine_status(
+        my_machine: Machine = Depends(get_machine)
+):
+    """Retrieve machine status"""
+    logger.debug("GET '/machine/status' endpoint called.")
+    working_piece_id = None
+    if my_machine.working_piece is not None:
+        working_piece_id = my_machine.working_piece['id']
+
+    queue = await my_machine.list_queued_pieces()
+
+    return schemas.MachineStatusResponse(
+        status=my_machine.status,
+        working_piece=working_piece_id,
+        queue=queue
+    )
 
 
 def get_public_key():

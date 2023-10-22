@@ -2,6 +2,8 @@ import logging
 import os
 import asyncio
 from fastapi import FastAPI, BackgroundTasks
+
+from app.business_logic.machine import Machine
 from app.routers import main_router
 from app.sql import models, database
 from app.routers.machine_suscriber import AsyncConsumer
@@ -43,7 +45,7 @@ app = FastAPI(
 
 app.include_router(main_router.router)
 
-rabbitmq_consumer = AsyncConsumer('event_exchange', 'payment.request', AsyncConsumer.consume_order)
+rabbitmq_consumer = AsyncConsumer('event_exchange', 'order.pieces', AsyncConsumer.consume_order)
 rabbitmq_consumer2 = AsyncConsumer('event_exchange', 'auth.publickey', AsyncConsumer.ask_public_key)
 
 
@@ -54,7 +56,11 @@ async def startup_event():
     async with database.engine.begin() as conn:
         await conn.run_sync(models.Base.metadata.create_all)
 
-    main_router.get_public_key()
+    from app import dependencies
+    logger.info("Creating machine")
+    await dependencies.get_machine()
+
+    # main_router.get_public_key()
 
     logger.debug("WAITING FOR RABBITMQ")
     consumer_tasks = [
@@ -62,6 +68,8 @@ async def startup_event():
         asyncio.create_task(rabbitmq_consumer2.start_consuming())
     ]
     asyncio.gather(*consumer_tasks)
+
+
 
 
 # Main #############################################################################################

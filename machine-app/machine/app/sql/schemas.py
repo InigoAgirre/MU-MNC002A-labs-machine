@@ -1,9 +1,10 @@
-from pydantic import BaseModel, Field
+# -*- coding: utf-8 -*-
+"""Classes for Request/Response schema definitions."""
+# pylint: disable=too-few-public-methods
+from typing import List, Optional
 from datetime import datetime
-from typing import Optional
+from pydantic import BaseModel, Field  # pylint: disable=no-name-in-module
 
-class Message(BaseModel):
-    detail: Optional[str] = Field(example="error or success message")
 
 class Piece(BaseModel):
     piece_id: int = Field(
@@ -23,3 +24,17 @@ class Piece(BaseModel):
         description="Identificador del pedido al que pertenece la pieza",
         example="1"
     )
+
+
+class MachineStatusResponse(BaseModel):
+    """machine status schema definition."""
+    status: str = Field(
+        description="Machine's current status",
+        default=None,
+        example="Waiting"
+    )
+    working_piece: Optional[int] = Field(
+        description="Current working piece id. None if not working piece.",
+        example=1
+    )
+    queue: List[int] = Field(description="Queued piece ids")

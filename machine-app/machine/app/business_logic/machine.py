@@ -1,105 +1,191 @@
+# -*- coding: utf-8 -*-
+"""Simulation of a machine that manufactures pieces."""
 import json
+import asyncio
+import logging
 from random import randint
-from time import sleep
-from collections import deque
-from threading import Thread, Lock, Event
-from sqlalchemy.sql import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import ProgrammingError, OperationalError
+
+from app.routers.machine_publisher import publish_msg
+from app.sql import crud
 from app.sql.models import Piece
-from ..routers.machine_publisher import publish_msg
 from app.sql.database import SessionLocal
 
+logger = logging.getLogger(__name__)
+logger.debug("Machine logger set.")
 
-class Machine(Thread):
+
+class Machine:
+    """Piece manufacturing machine simulator."""
     STATUS_WAITING = "Waiting"
     STATUS_CHANGING_PIECE = "Changing Piece"
     STATUS_WORKING = "Working"
-    __status_lock__ = Lock()
-    thread_session = None
+    __manufacturing_queue = asyncio.Queue()
+    __stop_machine = False
+    working_piece = None
+    status = STATUS_WAITING
 
-    def __init__(self):
-        Thread.__init__(self)
-        self.queue = deque([])
-        self.working_piece = None
-        self.status = Machine.STATUS_WAITING
-        self.instance = self
-        self.queue_not_empty_event = Event()
-        self.reload_pieces_at_startup()
-        self.order_finished = 0
-        self.start()
+    @classmethod
+    async def create(cls):
+        """Machine constructor: loads manufacturing/queued pieces and starts simulation."""
+        logger.info("AsyncMachine initialized")
+        self = Machine()
+        asyncio.create_task(self.manufacturing_coroutine())
+        await self.reload_queue_from_database()
+        return self
 
-    async def reload_pieces_at_startup(self):
-        self.thread_session = SessionLocal()
-        manufacturing_piece = await self.thread_session.execute(
-            select(Piece).filter(Piece.c.status == Piece.STATUS_MANUFACTURING))
-        manufacturing_piece = manufacturing_piece.scalar()  # Use scalar to get the result
-        if manufacturing_piece:
-            self.add_piece_to_queue(manufacturing_piece)
+    async def reload_queue_from_database(self):
+        """Reload queue from database, to reload data when the system has been rebooted."""
+        # Load the piece that was being manufactured
+        async with SessionLocal() as db:
+            manufacturing_piece = await Machine.get_manufacturing_piece(db)
+            if manufacturing_piece:
+                await self.add_piece_to_queue(manufacturing_piece)
 
-        queued_pieces = await self.thread_session.execute(select(Piece).filter(Piece.c.status == Piece.STATUS_QUEUED))
-        queued_pieces = queued_pieces.scalars().all()
-        if queued_pieces:
-            self.add_pieces_to_queue(queued_pieces)
-        await self.thread_session.close()
+            # Load the pieces that were in the queue
+            queued_pieces = await Machine.get_queued_pieces(db)
 
-    def run(self):
-        while True:
-            self.queue_not_empty_event.wait()
-            print("Thread notified that the queue is not empty.")
-            self.thread_session = SessionLocal()  # Use SessionLocal
+            if queued_pieces:
+                await self.add_pieces_to_queue(queued_pieces)
+            await db.close()
 
-            while self.queue.__len__() > 0:
-                self.create_piece()
+    @staticmethod
+    async def get_manufacturing_piece(db: AsyncSession):
+        """Gets the manufacturing piece from the database."""
+        try:
+            manufacturing_pieces = await crud.get_piece_list_by_status(
+                db,
+                Piece.STATUS_MANUFACTURING
+            )
+            if manufacturing_pieces and manufacturing_pieces[0]:
+                return manufacturing_pieces[0]
+        except (ProgrammingError, OperationalError):
+            logger.error(
+                "Error getting Manufacturing Piece at startup. It may be the first execution"
+            )
+        return None
 
-            self.queue_not_empty_event.clear()
-            print("Lock thread because the queue is empty.")
+    @staticmethod
+    async def get_queued_pieces(db: AsyncSession):
+        """Get all queued pieces from the database."""
+        try:
+            queued_pieces = await crud.get_piece_list_by_status(db, Piece.STATUS_QUEUED)
+            return queued_pieces
+        except (ProgrammingError, OperationalError):
+            logger.error("Error getting Queued Pieces at startup. It may be the first execution")
+            return []
 
-            self.instance.status = Machine.STATUS_WAITING
-            self.thread_session.close()
+    async def manufacturing_coroutine(self) -> None:
+        """Coroutine that manufactures queued pieces one by one."""
+        while not self.__stop_machine:
+            if self.__manufacturing_queue.empty():
+                self.status = self.STATUS_WAITING
+            piece_id = await self.__manufacturing_queue.get()
+            await self.create_piece(piece_id)
+            self.__manufacturing_queue.task_done()
 
-    def create_piece(self):
-        piece_ref = self.queue.popleft()
+    async def create_piece(self, piece_id: int):
+        """Simulates piece manufacturing."""
+        # Machine and piece status updated during manufacturing
+        async with SessionLocal() as db:
+            await self.update_working_piece(piece_id, db)
+            await self.working_piece_to_manufacturing(db)  # Update Machine&piece status
+            await db.close()
 
-        self.working_piece = self.thread_session.query(Piece).get(piece_ref)
+        await asyncio.sleep(randint(5, 20))  # Simulates time spent manufacturing
 
-        self.working_piece_to_manufacturing()
-
-        sleep(randint(5, 20))
-
-        self.working_piece_to_finished()
-
-        self.working_piece = None
-
-    def working_piece_to_manufacturing(self):
-        self.status = Machine.STATUS_WORKING
-        self.working_piece.status = Piece.STATUS_MANUFACTURING
-        self.thread_session.commit()
-        self.thread_session.flush()
-
-    async def working_piece_to_finished(self):
-        self.instance.status = Machine.STATUS_CHANGING_PIECE
-        self.working_piece.status = Piece.STATUS_MANUFACTURED
-        self.thread_session.commit()
-        self.thread_session.flush()
-
-        order_id = self.working_piece.order_id
+        async with SessionLocal() as db:
+            await self.working_piece_to_finished(db)  # Update Machine&Piece status
+            await db.close()
 
         message_body = {
-            'order_id': order_id
+            'piece_id': piece_id
         }
+
         await publish_msg(json.dumps(message_body))
+        logger.info(f"Processed piece for Order ID: {piece_id}")
+        self.working_piece = None
 
-    def add_pieces_to_queue(self, pieces):
+    async def update_working_piece(self, piece_id: int, db: AsyncSession):
+        """Loads a piece for the given id and updates the working piece."""
+        logger.debug("Updating working piece to %i", piece_id)
+        piece = await crud.get_piece(db, piece_id)
+        self.working_piece = piece.as_dict()
+
+    async def working_piece_to_manufacturing(self, db: AsyncSession):
+        """Updates piece status to manufacturing."""
+        self.status = Machine.STATUS_WORKING
+        try:
+            await crud.update_piece_status(db, self.working_piece['id'], Piece.STATUS_MANUFACTURING)
+        except Exception as exc:  # @ToDo: To general exception
+            logger.error("Could not update working piece status to manufacturing: %s", exc)
+
+    async def working_piece_to_finished(self, db: AsyncSession):
+        """Updates piece status to finished and order if all pieces are finished."""
+        logger.debug("Working piece finished.")
+        self.status = Machine.STATUS_CHANGING_PIECE
+
+        piece = await crud.update_piece_status(
+            db,
+            self.working_piece['id'],
+            Piece.STATUS_MANUFACTURED
+        )
+        self.working_piece = piece.as_dict()
+
+        piece = await crud.update_piece_manufacturing_date_to_now(
+            db,
+            self.working_piece['id']
+        )
+        self.working_piece = piece.as_dict()
+
+
+    async def add_pieces_to_queue(self, pieces):
+        """Adds a list of pieces to the queue and updates their status."""
+        logger.debug("Adding %i pieces to queue", len(pieces))
         for piece in pieces:
-            self.add_piece_to_queue(piece)
+            await self.add_piece_to_queue(piece)
 
-    def remove_pieces_from_queue(self, pieces):
+    async def add_piece_to_queue(self, piece):
+        """Adds the given piece from the queue."""
+        await self.__manufacturing_queue.put(piece.id)
+
+    async def remove_pieces_from_queue(self, pieces):
+        """Adds a list of pieces to the queue and updates their status."""
+        logger.debug("Removing %i pieces from queue", len(pieces))
         for piece in pieces:
-            if piece.status == Piece.STATUS_QUEUED:
-                self.queue.remove(piece.ref)
-                piece.status = Piece.STATUS_CANCELLED
+            await self.remove_piece_from_queue(piece)
 
-    def add_piece_to_queue(self, piece):
-        self.queue.append(piece.piece_id)
-        piece.status = Piece.STATUS_QUEUED
-        print("Adding piece to the queue: {}".format(piece.piece_id))
-        self.queue_not_empty_event.set()
+    async def remove_piece_from_queue(self, piece) -> bool:
+        """Removes the given piece from the queue."""
+        logger.info("Removing piece %i", piece.id)
+        if self.working_piece == piece.id:
+            logger.warning(
+                "Piece %i is being manufactured, cannot remove from queue\n\n",
+                piece.id
+            )
+            return False
+
+        item_list = []
+        removed = False
+        # Empty the list
+        while not self.__manufacturing_queue.empty():
+            item_list.append(self.__manufacturing_queue.get_nowait())
+
+        # Fill the list with all items but *piece_id*
+        for item in item_list:
+            if item != piece.id:
+                self.__manufacturing_queue.put_nowait(item)
+            else:
+                logging.debug("Piece %i removed from queue.", piece.id)
+                removed = True
+
+        if not removed:
+            logger.warning("Piece %i not found in the queue.", piece.id)
+
+        return removed
+
+    async def list_queued_pieces(self):
+        """Get queued piece ids as list."""
+        piece_list = list(self.__manufacturing_queue.__dict__['_queue'])
+        return piece_list

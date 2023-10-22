@@ -1,13 +1,16 @@
 import asyncio
 import json
 import logging
+from random import randint
+from time import sleep
 
 import aio_pika
 import requests
 
 from app.keys import RsaKeys
+from app.business_logic.machine import Machine
+from app.routers.machine_publisher import publish_msg
 from app.sql import schemas
-from ..business_logic.machine import Machine
 
 logger = logging.getLogger(__name__)
 my_machine = Machine()
@@ -41,8 +44,9 @@ class AsyncConsumer:
                     async with message.process():
                         await self.callback_func(message.body, exchange)
 
+
     @staticmethod
-    async def consume_order(body):
+    async def consume_order(body, exchange):
         logger.debug("Consume order has been called")
         content = json.loads(body)
         order_id = content['order_id']
@@ -50,11 +54,17 @@ class AsyncConsumer:
 
         logger.info(f"Received order for Order ID: {order_id}")
 
-        for _ in range(num_pieces_ordered):
-            # Create and add pieces to the machine queue
-            piece = schemas.Piece(order_id=order_id)
-            my_machine.add_piece_to_queue(piece)
+        for step in range(num_pieces_ordered):
+            logger.info(f"Performing piece {step + 1}")
+            sleep(randint(5, 20))
+            logger.info(f"Piece {step + 1} done")
+            #piece = schemas.Piece(order_id=order_id)
+            #await my_machine.add_piece_to_queue(piece)
 
+        message_body = {
+            'order_id': order_id
+        }
+        await publish_msg(exchange, "machine.processed", json.dumps(message_body))
         logger.info(f"Processed order for Order ID: {order_id}")
 
     @staticmethod
