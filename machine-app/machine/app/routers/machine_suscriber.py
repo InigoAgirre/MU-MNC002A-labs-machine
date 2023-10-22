@@ -49,7 +49,7 @@ class AsyncConsumer:
     async def consume_order(body, exchange):
         logger.debug("Consume order has been called")
         content = json.loads(body)
-        order_id = content['order_id']
+        order_id = content['id']
         num_pieces_ordered = content['number_of_pieces']
 
         logger.info(f"Received order for Order ID: {order_id}")
@@ -62,7 +62,7 @@ class AsyncConsumer:
             #await my_machine.add_piece_to_queue(piece)
 
         message_body = {
-            'order_id': order_id
+            'id': order_id
         }
         await publish_msg(exchange, "machine.processed", json.dumps(message_body))
         logger.info(f"Processed order for Order ID: {order_id}")
