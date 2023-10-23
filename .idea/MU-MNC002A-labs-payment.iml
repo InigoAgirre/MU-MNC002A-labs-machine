@@ -6,7 +6,7 @@
       <excludeFolder url="file://$MODULE_DIR$/env" />
       <excludeFolder url="file://$MODULE_DIR$/venv" />
     </content>
-    <orderEntry type="jdk" jdkName="Python 3.9 (MU-MNC002A-labs-machine-master)" jdkType="Python SDK" />
+    <orderEntry type="jdk" jdkName="Python 3.9 (MU-MNC002A-labs-machine)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
   <component name="PyNamespacePackagesService">

@@ -3,7 +3,6 @@ import os
 import asyncio
 from fastapi import FastAPI, BackgroundTasks
 
-from app.business_logic.machine import Machine
 from app.routers import main_router
 from app.sql import models, database
 from app.routers.machine_suscriber import AsyncConsumer
@@ -60,7 +59,7 @@ async def startup_event():
     logger.info("Creating machine")
     await dependencies.get_machine()
 
-    # main_router.get_public_key()
+    main_router.get_public_key()
 
     logger.debug("WAITING FOR RABBITMQ")
     consumer_tasks = [
