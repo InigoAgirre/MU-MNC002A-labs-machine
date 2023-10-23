@@ -59,15 +59,14 @@ async def startup_event():
     logger.info("Creating machine")
     await dependencies.get_machine()
 
-    #main_router.get_public_key()
+    main_router.get_public_key()
 
     logger.debug("WAITING FOR RABBITMQ")
-    #consumer_tasks = [
-      #  asyncio.create_task(rabbitmq_consumer.start_consuming()),
-     #   asyncio.create_task(rabbitmq_consumer2.start_consuming())
-    #]
-    #asyncio.gather(*consumer_tasks)
-    asyncio.create_task(rabbitmq_consumer.start_consuming())
+    consumer_tasks = [
+        asyncio.create_task(rabbitmq_consumer.start_consuming()),
+        asyncio.create_task(rabbitmq_consumer2.start_consuming())
+    ]
+    asyncio.gather(*consumer_tasks)
 
 
 
