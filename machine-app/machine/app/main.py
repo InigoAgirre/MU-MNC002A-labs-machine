@@ -44,7 +44,7 @@ app = FastAPI(
 
 app.include_router(main_router.router)
 
-rabbitmq_consumer = AsyncConsumer('event_exchange', 'order.pieces', AsyncConsumer.consume_order)
+rabbitmq_consumer = AsyncConsumer('event_exchange', 'order.piece', AsyncConsumer.consume_order)
 rabbitmq_consumer2 = AsyncConsumer('event_exchange', 'auth.publickey', AsyncConsumer.ask_public_key)
 
 
@@ -59,14 +59,15 @@ async def startup_event():
     logger.info("Creating machine")
     await dependencies.get_machine()
 
-    main_router.get_public_key()
+    #main_router.get_public_key()
 
     logger.debug("WAITING FOR RABBITMQ")
-    consumer_tasks = [
-        asyncio.create_task(rabbitmq_consumer.start_consuming()),
-        asyncio.create_task(rabbitmq_consumer2.start_consuming())
-    ]
-    asyncio.gather(*consumer_tasks)
+    #consumer_tasks = [
+      #  asyncio.create_task(rabbitmq_consumer.start_consuming()),
+     #   asyncio.create_task(rabbitmq_consumer2.start_consuming())
+    #]
+    #asyncio.gather(*consumer_tasks)
+    asyncio.create_task(rabbitmq_consumer.start_consuming())
 
 
 
