@@ -62,7 +62,7 @@ class AsyncConsumer:
             #await my_machine.add_piece_to_queue(piece)
 
         message_body = {
-            'id': order_id
+            'order_id': order_id
         }
         await publish_msg(exchange, "machine.processed", json.dumps(message_body))
         logger.info(f"Processed order for Order ID: {order_id}")
