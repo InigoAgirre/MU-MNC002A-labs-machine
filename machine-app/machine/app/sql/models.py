@@ -20,13 +20,13 @@ class BaseModel(Base):
 
 class Piece(BaseModel):
     STATUS_CREATED = "Created"
-    STATUS_CANCELLED = "Cancelled"
-    STATUS_QUEUED = "Queued"
     STATUS_MANUFACTURING = "Manufacturing"
     STATUS_MANUFACTURED = "Manufactured"
 
     __tablename__ = "piece"
-    piece_id = Column(Integer, primary_key=True)
-    manufacturing_date = Column(DateTime(timezone=True), server_default=None)
-    status = Column(String(256), default=STATUS_QUEUED)
+    id = Column(Integer, primary_key=True)
+    status = Column(String(256), default=STATUS_CREATED)
     order_id = Column(Integer, nullable=False)
+
+    def __repr__(self):
+        return f"<Piece(id={self.id}, status='{self.status}', order_id={self.order_id})>"

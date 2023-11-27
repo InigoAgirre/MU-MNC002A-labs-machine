@@ -10,7 +10,8 @@ import requests
 from app.keys import RsaKeys
 from app.business_logic.machine import Machine
 from app.routers.machine_publisher import publish_msg
-from app.sql import schemas
+from app.sql import schemas, crud
+from app.sql.database import SessionLocal
 
 logger = logging.getLogger(__name__)
 my_machine = Machine()
@@ -44,28 +45,32 @@ class AsyncConsumer:
                     async with message.process():
                         await self.callback_func(message.body, exchange)
 
-
     @staticmethod
     async def consume_order(body, exchange):
         logger.debug("Consume order has been called")
+        db = SessionLocal()
         content = json.loads(body)
         order_id = content['id']
         num_pieces_ordered = content['number_of_pieces']
-
         logger.info(f"Received order for Order ID: {order_id}")
+        piece_schema = schemas.PieceBase(status="Queued", order_id=content['id'])
 
-        for step in range(num_pieces_ordered):
-            logger.info(f"Performing piece {step + 1}")
-            sleep(randint(5, 20))
-            logger.info(f"Piece {step + 1} done")
-            #piece = schemas.Piece(order_id=order_id)
-            #await my_machine.add_piece_to_queue(piece)
+        for _ in range(num_pieces_ordered):
+            piece = await crud.add_new_piece(db, piece_schema)
+            logger.info(f"Performing piece ID:{piece.id}")
+            await crud.update_piece_status(db, piece.id, piece.STATUS_MANUFACTURING)
+            sleep(randint(5, 10))
+            await crud.update_piece_status(db, piece.id, piece.STATUS_MANUFACTURED)
+            await crud.update_piece_manufacturing_date_to_now(db, piece.id)
 
-        message_body = {
-            'order_id': order_id
-        }
-        await publish_msg(exchange, "machine.processed", json.dumps(message_body))
-        logger.info(f"Processed order for Order ID: {order_id}")
+            message_body = {
+                'order_id': order_id
+            }
+            await publish_msg(exchange, "machine.processed", json.dumps(message_body))
+            logger.info(f"Piece ID:{piece.id} done")
+
+        logger.info(f"Pieces for order {order_id} done")
+
 
     @staticmethod
     async def ask_public_key(body, exchange):

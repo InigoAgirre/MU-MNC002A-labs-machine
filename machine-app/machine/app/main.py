@@ -55,10 +55,6 @@ async def startup_event():
     async with database.engine.begin() as conn:
         await conn.run_sync(models.Base.metadata.create_all)
 
-    from app import dependencies
-    logger.info("Creating machine")
-    await dependencies.get_machine()
-
     main_router.get_public_key()
 
     logger.debug("WAITING FOR RABBITMQ")

@@ -16,7 +16,7 @@ router = APIRouter()
 # Pieces ###########################################################################################
 @router.get(
     "/piece",
-    response_model=List[schemas.Piece],
+    response_model=List[schemas.PieceBase],
     summary="retrieve piece list",
     tags=["Piece", "List"]
 )
@@ -31,7 +31,7 @@ async def get_piece_list(
 @router.get(
     "/piece/{piece_id}",
     summary="Retrieve single piece by id",
-    response_model=schemas.Piece,
+    response_model=schemas.PieceBase,
     tags=['Piece']
 )
 async def get_single_piece(
@@ -41,31 +41,6 @@ async def get_single_piece(
     """Retrieve single piece by id"""
     logger.debug("GET '/piece/%i' endpoint called.", piece_id)
     return await crud.get_piece(db, piece_id)
-
-
-# Machine ##########################################################################################
-@router.get(
-    "/machine/status",
-    summary="Retrieve machine status",
-    response_model=schemas.MachineStatusResponse,
-    tags=['Machine']
-)
-async def machine_status(
-        my_machine: Machine = Depends(get_machine)
-):
-    """Retrieve machine status"""
-    logger.debug("GET '/machine/status' endpoint called.")
-    working_piece_id = None
-    if my_machine.working_piece is not None:
-        working_piece_id = my_machine.working_piece['id']
-
-    queue = await my_machine.list_queued_pieces()
-
-    return schemas.MachineStatusResponse(
-        status=my_machine.status,
-        working_piece=working_piece_id,
-        queue=queue
-    )
 
 
 def get_public_key():
