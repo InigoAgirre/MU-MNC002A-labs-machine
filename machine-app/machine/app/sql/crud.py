@@ -63,7 +63,7 @@ async def update_piece_manufacturing_date_to_now(db: AsyncSession, piece_id):
 
 async def get_piece_list(db: AsyncSession):
     """Load all the orders from the database."""
-    stmt = select(models.Piece).join(models.Piece.order)
+    stmt = select(models.Piece)
     pieces = await get_list_statement_result(db, stmt)
     return pieces
 

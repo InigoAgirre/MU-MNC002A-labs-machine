@@ -3,15 +3,18 @@ import json
 import logging
 from random import randint
 from time import sleep
-
-import aio_pika
-import requests
-
-from app.keys import RsaKeys
 from app.business_logic.machine import Machine
 from app.routers.machine_publisher import publish_msg
-from app.sql import schemas, crud
 from app.sql.database import SessionLocal
+import os
+import aio_pika
+from fastapi import status
+from app.sql import crud, schemas
+from .router_utils import raise_and_log_error
+import requests
+from app.keys import RsaKeys
+from app.business_logic.BLConsul import get_consul_service
+from app.routers.log_publisher import publish_log_msg
 
 logger = logging.getLogger(__name__)
 my_machine = Machine()
@@ -74,11 +77,12 @@ class AsyncConsumer:
 
     @staticmethod
     async def ask_public_key(body, exchange):
-        logger.debug("GETTING PUBLIC KEY")
-        endpoint = "http://192.168.17.11/auth/public-key"
+        logger.debug("GETTING PUBLIC KEY RABBITMQ")
+        replicas_auth = get_consul_service("auth")
+        endpoint = f"https://{replicas_auth['Address']}/auth/public-key"
 
         try:
-            response = requests.get(endpoint)
+            response = requests.get(endpoint, verify=False)
 
             if response.status_code == 200:
                 x = response.json()["public_key"]
@@ -86,4 +90,5 @@ class AsyncConsumer:
             else:
                 print(f"Error al obtener la clave pública. Código de respuesta: {response.status_code}")
         except requests.exceptions.RequestException as e:
+            await publish_log_msg(e, "ERROR", os.path.basename(__file__))
             print(f"Error de solicitud: {e}")

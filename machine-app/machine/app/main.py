@@ -2,10 +2,12 @@ import logging
 import os
 import asyncio
 from fastapi import FastAPI, BackgroundTasks
-
 from app.routers import main_router
 from app.sql import models, database
 from app.routers.machine_suscriber import AsyncConsumer
+from app.business_logic.BLConsul import register_consul_service
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 
 # Configure logging ################################################################################
 logger = logging.getLogger(__name__)
@@ -44,6 +46,16 @@ app = FastAPI(
 
 app.include_router(main_router.router)
 
+# Configuración de TLS
+cert_path = "/app/certs/fastapi_cert.pem"
+key_path = "/app/certs/fastapi_key.pem"
+
+# Configuración de middleware para redireccionar HTTP a HTTPS
+app.add_middleware(HTTPSRedirectMiddleware)
+
+# Configuración de middleware para Trusted Host (opcional pero recomendado)
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])
+
 rabbitmq_consumer = AsyncConsumer('event_exchange', 'order.piece', AsyncConsumer.consume_order)
 rabbitmq_consumer2 = AsyncConsumer('event_exchange', 'auth.publickey', AsyncConsumer.ask_public_key)
 
@@ -64,7 +76,7 @@ async def startup_event():
     ]
     asyncio.gather(*consumer_tasks)
 
-
+    register_consul_service()
 
 
 # Main #############################################################################################
@@ -77,7 +89,9 @@ if __name__ == "__main__":
         app,
         host="0.0.0.0",
         port=8000,
-        log_config='logging.yml'
+        log_config='logging.yml',
+        ssl_keyfile=key_path,
+        ssl_certfile=cert_path
     )
 
     logger.debug("App finished as script")
