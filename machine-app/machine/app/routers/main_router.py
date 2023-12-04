@@ -40,8 +40,8 @@ async def get_piece_list(
         raise_and_log_error(logger, status.HTTP_409_CONFLICT, f"Error retrieving piece list: {exc}")
 
 
-@router.get("/payment/health", summary="Health check", response_model=str)
-@router.head("/payment/health", summary="Health check")
+@router.get("/machine/health", summary="Health check", response_model=str)
+@router.head("/machine/health", summary="Health check")
 def health_check():
     """Health check endpoint."""
     if RsaKeys.get_public_key() is None:
