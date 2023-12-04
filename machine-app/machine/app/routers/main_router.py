@@ -16,7 +16,7 @@ router = APIRouter()
 
 
 @router.get(
-    "/piece",
+    "/machine/pieces",
     summary="retrieve piece list",
     response_model=List[schemas.PieceBase],
     tags=["Piece", "List"],
@@ -26,7 +26,7 @@ async def get_piece_list(
     db: AsyncSession = Depends(get_db),
 ):
     """Retrieve the list of pieces."""
-    logger.debug("GET '/piece' endpoint called.")
+    logger.debug("GET '/machine/pieces' endpoint called.")
 
     try:
         jwt_token = get_jwt_from_request(request)
