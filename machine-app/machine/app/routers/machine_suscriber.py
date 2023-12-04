@@ -68,7 +68,7 @@ class AsyncConsumer:
                 message_body = {
                     'order_id': order_id
                 }
-                await publish_msg(exchange, "machine.processed", json.dumps(message_body))
+                await publish_msg("machine.processed", json.dumps(message_body))
                 logger.info(f"Piece ID:{piece.id} done")
 
             logger.info(f"Pieces for order {order_id} done")
