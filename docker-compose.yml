@@ -7,6 +7,7 @@ services:
     volumes:
       - './machine-app/machine:/code'
       - './db_volume:/volume'
+      - './certs/fastapi:/code/certs'
     environment:
       PYTHONUNBUFFERED: 1
       SQLALCHEMY_DATABASE_URL: ${MACHINE_SQLALCHEMY_SQLITE_DATABASE_URI}

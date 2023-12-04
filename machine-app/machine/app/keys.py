@@ -54,4 +54,3 @@ class RsaKeys(object):
             raise_and_log_error(logger, status.HTTP_401_UNAUTHORIZED, f"JWT signature verification failed {exc}")
         except Exception as e:
             raise_and_log_error(logger, status.HTTP_401_UNAUTHORIZED, f"JWT error {e}")
-

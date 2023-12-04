@@ -3,7 +3,6 @@ import json
 import logging
 from random import randint
 from time import sleep
-from app.business_logic.machine import Machine
 from app.routers.machine_publisher import publish_msg
 from app.sql.database import SessionLocal
 import os
@@ -17,7 +16,6 @@ from app.business_logic.BLConsul import get_consul_service
 from app.routers.log_publisher import publish_log_msg
 
 logger = logging.getLogger(__name__)
-my_machine = Machine()
 
 
 class AsyncConsumer:
@@ -58,21 +56,30 @@ class AsyncConsumer:
         logger.info(f"Received order for Order ID: {order_id}")
         piece_schema = schemas.PieceBase(status="Queued", order_id=content['id'])
 
-        for _ in range(num_pieces_ordered):
-            piece = await crud.add_new_piece(db, piece_schema)
-            logger.info(f"Performing piece ID:{piece.id}")
-            await crud.update_piece_status(db, piece.id, piece.STATUS_MANUFACTURING)
-            sleep(randint(5, 10))
-            await crud.update_piece_status(db, piece.id, piece.STATUS_MANUFACTURED)
-            await crud.update_piece_manufacturing_date_to_now(db, piece.id)
+        try:
+            for _ in range(num_pieces_ordered):
+                piece = await crud.add_new_piece(db, piece_schema)
+                logger.info(f"Performing piece ID:{piece.id}")
+                await crud.update_piece_status(db, piece.id, piece.STATUS_MANUFACTURING)
+                sleep(randint(5, 10))
+                await crud.update_piece_status(db, piece.id, piece.STATUS_MANUFACTURED)
+                await crud.update_piece_manufacturing_date_to_now(db, piece.id)
 
-            message_body = {
-                'order_id': order_id
-            }
-            await publish_msg(exchange, "machine.processed", json.dumps(message_body))
-            logger.info(f"Piece ID:{piece.id} done")
+                message_body = {
+                    'order_id': order_id
+                }
+                await publish_msg(exchange, "machine.processed", json.dumps(message_body))
+                logger.info(f"Piece ID:{piece.id} done")
 
-        logger.info(f"Pieces for order {order_id} done")
+            logger.info(f"Pieces for order {order_id} done")
+
+        except Exception as e:
+            error_message = f"Error processing order {order_id}: {str(e)}"
+            await publish_log_msg(error_message, "ERROR", os.path.basename(__file__))
+            logger.error(error_message)
+
+        finally:
+            db.close()
 
 
     @staticmethod

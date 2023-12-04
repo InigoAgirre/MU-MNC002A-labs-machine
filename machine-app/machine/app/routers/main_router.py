@@ -1,3 +1,4 @@
+import os
 from typing import List
 import logging
 from fastapi import APIRouter, Depends, status, Request, HTTPException
@@ -14,7 +15,29 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-# Pieces ###########################################################################################
+@router.get(
+    "/piece",
+    summary="retrieve piece list",
+    response_model=List[schemas.PieceBase],
+    tags=["Piece", "List"],
+)
+async def get_piece_list(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Retrieve the list of pieces."""
+    logger.debug("GET '/piece' endpoint called.")
+
+    try:
+        jwt_token = get_jwt_from_request(request)
+        RsaKeys.verify_jwt(jwt_token)
+
+        pieces = await crud.get_piece_list(db)
+
+        return pieces
+    except Exception as exc:
+        await publish_log_msg(exc, "WARNING", os.path.basename(__file__))
+        raise_and_log_error(logger, status.HTTP_409_CONFLICT, f"Error retrieving piece list: {exc}")
 
 
 @router.get("/payment/health", summary="Health check", response_model=str)
@@ -49,4 +72,3 @@ def get_jwt_from_request(request):
         raise_and_log_error(logger, status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "NO JWT PROVIDED")
     jwt_token = auth.split(" ")[1]
     return jwt_token
-
