@@ -1,5 +1,7 @@
 from sqlalchemy.sql import select
 
+from app.routers.router_utils import raise_and_log_error
+
 # -*- coding: utf-8 -*-
 """Functions that interact with the database."""
 import logging
@@ -7,6 +9,7 @@ from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from app.sql import models
+from fastapi import status
 
 logger = logging.getLogger(__name__)
 
@@ -62,10 +65,19 @@ async def update_piece_manufacturing_date_to_now(db: AsyncSession, piece_id):
 
 
 async def get_piece_list(db: AsyncSession):
-    """Load all the orders from the database."""
-    stmt = select(models.Piece)
-    pieces = await get_list_statement_result(db, stmt)
-    return pieces
+    """Load all the orders from the database for a specific user."""
+    try:
+        # Filtra las entregas por el user_id
+        result = await db.execute(select(models.Piece))
+        item_list = result.unique().scalars().all()
+        if not item_list:
+            raise_and_log_error(logger, status.HTTP_403_FORBIDDEN, f"No tienes ninguna pieza")
+        else:
+            return item_list
+    except Exception as e:
+        # Puedes manejar la excepción de la forma que consideres adecuada
+        raise_and_log_error(logger, status.HTTP_403_FORBIDDEN, f"Error al conseguir la lista de piezas.")
+        return []  # In case of error, return an empty list
 
 
 async def get_piece(db: AsyncSession, piece_id):

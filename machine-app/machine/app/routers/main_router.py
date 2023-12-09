@@ -7,9 +7,10 @@ from app.dependencies import get_db
 from app.sql import crud, schemas
 from .router_utils import raise_and_log_error
 import requests
-from app.keys import RsaKeys
 from app.business_logic.BLConsul import get_consul_service
 from app.routers.log_publisher import publish_log_msg
+from fastapi.responses import JSONResponse
+from app.keys import RsaKeys
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -17,27 +18,28 @@ router = APIRouter()
 
 @router.get(
     "/machine/pieces",
-    summary="retrieve piece list",
+    summary="Retrieve all YOUR pieces by id",
     response_model=List[schemas.PieceBase],
-    tags=["Piece", "List"],
+    tags=['Piece', 'List']
 )
-async def get_piece_list(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-):
-    """Retrieve the list of pieces."""
-    logger.debug("GET '/machine/pieces' endpoint called.")
-
+async def view_deliveries(request: Request, db: AsyncSession = Depends(get_db)):
+    logger.debug("GET '/machine' endpoint called.")
     try:
-        jwt_token = get_jwt_from_request(request)
-        RsaKeys.verify_jwt(jwt_token)
-
-        pieces = await crud.get_piece_list(db)
-
-        return pieces
+        token = get_jwt_from_request(request)
+        keys = RsaKeys()
+        keys.verify_jwt(token)
+        piece_list = await crud.get_piece_list(db)
+        pieces_as_dict = [
+            {
+                "id": item.id,
+                "status": item.status,
+                "order_id": item.order_id
+            }
+            for item in piece_list
+        ]
+        return JSONResponse(pieces_as_dict)
     except Exception as exc:
-        await publish_log_msg(exc, "WARNING", os.path.basename(__file__))
-        raise_and_log_error(logger, status.HTTP_409_CONFLICT, f"Error retrieving piece list: {exc}")
+        raise_and_log_error(logger, status.HTTP_409_CONFLICT, f"Error getting the deliveries: {exc}")
 
 
 @router.get("/machine/health", summary="Health check", response_model=str)
